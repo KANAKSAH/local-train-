@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LocoCrowd - Live Train Tracker</title>
+    <style>
+        /* --- CSS STYLING --- */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: #f0f2f5;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .app-container {
+            background: white;
+            max-width: 420px;
+            width: 100%;
+            border-radius: 16px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+            padding: 24px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 25px;
+            border-bottom: 2px solid #f0f2f5;
+            padding-bottom: 15px;
+        }
+
+        header h1 {
+            color: #0056b3;
+            font-size: 26px;
+            margin-bottom: 5px;
+        }
+
+        header p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .section-card {
+            margin-bottom: 20px;
+            padding: 16px;
+            border-radius: 12px;
+            background: #fafafa;
+            border: 1px solid #e9ecef;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        select {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1.5px solid #ced4da;
+            font-size: 16px;
+            background-color: white;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        select:focus {
+            border-color: #0056b3;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Status Display */
+        .status-box h2 {
+            font-size: 18px;
+            margin-bottom: 10px;
+            color: #495057;
+        }
+
+        .indicator {
+            padding: 14px;
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+            color: white;
+            border-radius: 8px;
+            margin: 12px 0;
+            transition: all 0.3s ease;
+        }
+
+        .bg-light { background-color: #2b9348; }
+        .bg-medium { background-color: #e9b410; color: #212529; }
+        .bg-heavy { background-color: #d90429; }
+
+        .passenger-stats {
+            font-size: 15px;
+            color: #495057;
+            text-align: center;
+            margin-top: 8px;
+        }
+
+        /* Buttons */
+        .btn-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: transform 0.1s, opacity 0.2s;
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        .btn-red { background: #d90429; color: white; }
+        .btn-yellow { background: #e9b410; color: #212529; }
+        .btn-green { background: #2b9348; color: white; }
+
+        .toast-notification {
+            text-align: center;
+            color: #2b9348;
+            font-size: 13px;
+            font-weight: 600;
+            margin-top: 8px;
+            min-height: 18px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <header>
+            <h1>🚇 LocoCrowd</h1>
+            <p>Real-Time Crowd Sourced Train Tracker</p>
+        </header>
+
+        <main>
+            <!-- Route Selection Card -->
+            <section class="section-card">
+                <label for="train-select">Select Live Route:</label>
+                <select id="train-select" onchange="updateTrainStatus()">
+                    <option value="">-- Choose a local train --</option>
+                    <option value="local-101">Mumbai Fast Local (08:30 AM)</option>
+                    <option value="local-202">Delhi Metro Yellow Line (11:15 AM)</option>
+                    <option value="local-303">Kolkata Suburban Local (03:00 PM)</option>
+                </select>
+            </section>
+
+            <!-- Dynamic Status Card -->
+            <section id="status-display" class="section-card status-box hidden">
+                <h2>Live Crowd Status</h2>
+                <div id="crowd-indicator" class="indicator">Loading...</div>
+                <p class="passenger-stats">Estimated Boarded Passengers: <strong id="passenger-count">0</strong></p>
+            </section>
+
+            <!-- Crowdsourcing Reporting Action Card -->
+            <section class="section-card">
+                <label>Inside the train? Report Live Status:</label>
+                <div class="btn-group">
+                    <button onclick="reportCrowd('Heavy')" class="btn btn-red">🚨 Packed / Heavy Crowd</button>
+                    <button onclick="reportCrowd('Medium')" class="btn btn-yellow">🟡 Moderate / Standing Room</button>
+                    <button onclick="reportCrowd('Light')" class="btn btn-green">📉 Empty / Seats Available</button>
+                </div>
+                <div id="toast-message" class="toast-notification"></div>
+            </section>
+        </main>
+    </div>
+
+    <!-- --- JAVASCRIPT LOGIC --- -->
+    <script>
+        // Mock data structure acting as a local runtime database
+        const trainDatabase = {
+            "local-101": { name: "Mumbai Fast Local", status: "Heavy", count: 1420 },
+            "local-202": { name: "Delhi Metro Yellow Line", status: "Medium", count: 680 },
+            "local-303": { name: "Kolkata Suburban Local", status: "Light", count: 110 }
+        };
+
+        // Main controller function to update the user interface
+        function updateTrainStatus() {
+            const selectElement = document.getElementById("train-select");
+            const selectedTrainId = selectElement.value;
+            const statusBox = document.getElementById("status-display");
+            
+            // If default select option chosen, hide the info panel
+            if (!selectedTrainId) {
+                statusBox.classList.add("hidden");
+                return;
+            }
+
+            const train = trainDatabase[selectedTrainId];
+            const indicator = document.getElementById("crowd-indicator");
+            const countText = document.getElementById("passenger-count");
+
+            // Reset dynamic indicator styling classes
+            indicator.className = "indicator"; 
+
+            // Apply contextual color styling based on data status
+            switch(train.status) {
+                case "Light":
+                    indicator.innerText = "📉 Seats Available (Light)";
+                    indicator.classList.add("bg-light");
+                    break;
+                case "Medium":
+                    indicator.innerText = "🟡 Standing Room Only (Medium)";
+                    indicator.classList.add("bg-medium");
+                    break;
+                case "Heavy":
+                    indicator.innerText = "🚨 Extremely Crowded (Heavy)";
+                    indicator.classList.add("bg-heavy");
+                    break;
+            }
+
+            countText.innerText = train.count.toLocaleString();
+            statusBox.classList.remove("hidden");
+        }
+
+        // Feature allowing user inputs to interact directly with dataset
+        function reportCrowd(userReportedStatus) {
+            const selectElement = document.getElementById("train-select");
+            const selectedTrainId = selectElement.value;
+
+            if (!selectedTrainId) {
+                alert("Please select a train from the dropdown before reporting.");
+                return;
+            }
+
+            // Update current model state variables
+            trainDatabase[selectedTrainId].status = userReportedStatus;
+            
+            if (userReportedStatus === "Heavy") trainDatabase[selectedTrainId].count += 35;
+            if (userReportedStatus === "Light") trainDatabase[selectedTrainId].count = Math.max(10, trainDatabase[selectedTrainId].count - 35);
+
+            // Re-render UI views
+            updateTrainStatus();
+            
+            // Show a professional modern toast message instead of a breaking alert window
+            const toast = document.getElementById("toast-message");
+            toast.innerText = "✓ Status updated via crowdsourced report!";
+            setTimeout(() => { toast.innerText = ""; }, 3000);
+        }
+
+        // INTERNSHIP BONUS: Simulates real live background data shifts every 4 seconds
+        setInterval(() => {
+            const selectElement = document.getElementById("train-select");
+            const selectedTrainId = selectElement.value;
+            
+            // Slightly fluctuate passenger numbers randomly to simulate real life telemetry
+            Object.keys(trainDatabase).forEach(key => {
+                const fluctuation = Math.floor(Math.random() * 11) - 5; // changes by -5 to +5
+                trainDatabase[key].count = Math.max(0, trainDatabase[key].count + fluctuation);
+            });
+
+            // If the user currently views a train, update the display numbers dynamically
+            if (selectedTrainId) {
+                document.getElementById("passenger-count").innerText = trainDatabase[selectedTrainId].count.toLocaleString();
+            }
+        }, 4000);
+    </script>
+</body>
+</html>
